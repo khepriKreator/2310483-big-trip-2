@@ -1,16 +1,14 @@
 import MainPresenter from './presenters/main-presenter.js';
-import TripModel from './fake-api/models/trip-model.js';
+import PointsModel from './api/models/points-model.js';
 
 const containers = {
   filters: document.querySelector('.trip-controls__filters'),
   main: document.querySelector('.trip-events'),
 };
-const {points, destinations, offersData} = new TripModel().getTripData();
+const pointsModel = new PointsModel();
 const presenter = new MainPresenter(
   {
     containers,
-    points,
-    destinations,
-    offersData
+    pointsModel
   });
 presenter.init();

@@ -9,10 +9,7 @@ import PointPresenter from './point-presenter.js';
 import dayjs from 'dayjs';
 
 export default class MainPresenter {
-  #destinations = [];
-  #offersData = [];
-  #points = [];
-  #sourcedPoints = [];
+  #pointsModel = null;
   #mainContainer = null;
   #filtersContainer = null;
 
@@ -23,14 +20,31 @@ export default class MainPresenter {
   #pointsPresenters = new Map();
   #choosenSortOption = DEFAULT_SORT_OPTION;
 
-  constructor({containers, points, destinations, offersData}) {
+  constructor({containers, pointsModel}) {
     this.#mainContainer = containers.main;
     this.#filtersContainer = containers.filters;
+    this.#pointsModel = pointsModel;
+  }
 
-    this.#sourcedPoints = points;
-    this.#points = points;
-    this.#destinations = destinations;
-    this.#offersData = offersData;
+  get points () {
+    switch (this.#choosenSortOption) {
+      case 'sort-day':
+        return [...this.#pointsModel.points].sort((a, b) => dayjs(a.dateFrom).diff(dayjs(b.dateFrom)));
+      case 'sort-time':
+        return [...this.#pointsModel.points].sort((a, b) => dayjs(a.dateFrom).diff(dayjs(a.dateTo)) - dayjs(b.dateFrom).diff(dayjs(b.dateTo)));
+      case 'sort-price':
+        return [...this.#pointsModel.points].sort((a, b) => b.basePrice - a.basePrice);
+    }
+
+    return this.#pointsModel.points;
+  }
+
+  get destinations() {
+    return this.#pointsModel.destinations;
+  }
+
+  get offersData() {
+    return this.#pointsModel.offersData;
   }
 
   init() {
@@ -39,12 +53,12 @@ export default class MainPresenter {
   }
 
   #renderFilters() {
-    render(new FiltersView(FiltersOptions, this.#points), this.#filtersContainer);
+    render(new FiltersView(FiltersOptions, this.points), this.#filtersContainer);
   }
 
   #renderPointsBoard() {
     render(this.#eventListComponent, this.#mainContainer);
-    if(this.#points.length === 0) {
+    if(this.points.length === 0) {
       this.#renderEmptyList();
       return;
     }
@@ -65,21 +79,24 @@ export default class MainPresenter {
     render(this.#emptyListComponent, this.#mainContainer);
   }
 
+  #renderPoint(point) {
+    const pointPresenter = new PointPresenter(
+      {
+        container: this.#eventListComponent.element,
+        point,
+        destinations: this.destinations,
+        offersData: this.offersData,
+        onDataUpdate: this.#handlePointChange,
+        onModeChange: this.#handleEditorMode
+      }
+    );
+    pointPresenter.init();
+    this.#pointsPresenters.set(point.id, pointPresenter);
+  }
+
   #renderPoints() {
-    this.#sortPoints(this.#choosenSortOption);
-    this.#points.forEach((point) => {
-      const pointPresenter = new PointPresenter(
-        {
-          container: this.#eventListComponent.element,
-          point,
-          destinations: this.#destinations,
-          offersData: this.#offersData,
-          onDataUpdate: this.#handlePointChange,
-          onModeChange: this.#handleEditorMode
-        }
-      );
-      pointPresenter.init();
-      this.#pointsPresenters.set(point.id, pointPresenter);
+    this.points.forEach((point) => {
+      this.#renderPoint(point);
     });
   }
 
@@ -87,22 +104,6 @@ export default class MainPresenter {
     this.#pointsPresenters.forEach((pointPresenter) => pointPresenter.destroy());
     this.#pointsPresenters.clear();
   }
-
-  #sortPoints = (sortType) => {
-    switch (sortType) {
-      case 'sort-day':
-        this.#points.sort((a, b) => dayjs(a.dateFrom).diff(dayjs(b.dateFrom)));
-        break;
-      case 'sort-time':
-        this.#points.sort((a, b) => dayjs(a.dateFrom).diff(dayjs(a.dateTo)) - dayjs(b.dateFrom).diff(dayjs(b.dateTo)));
-        break;
-      case 'sort-price':
-        this.#points.sort((a, b) => b.basePrice - a.basePrice);
-        break;
-      default:
-        this.#points = [...this.#sourcedPoints];
-    }
-  };
 
   #handleSortPoints = (sortType) => {
     if (this.#choosenSortOption === sortType) {
@@ -121,13 +122,7 @@ export default class MainPresenter {
   };
 
   #handlePointChange = (updatedPoint) => {
-    const pointIndex = this.#points.findIndex((point) => point.id === updatedPoint.id);
-
-    if (pointIndex === -1) {
-      return;
-    }
-
-    this.#points[pointIndex] = updatedPoint;
+    this.#pointsModel.updatePoint(updatedPoint);
 
     const pointPresenter = this.#pointsPresenters.get(updatedPoint.id);
 
